@@ -1,0 +1,13 @@
+node_modules/
+functions/lib/
+.firebase/
+*.log
+.DS_Store
+.env
+# Flutter
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/android/key.properties
+app/android/app/*.jks

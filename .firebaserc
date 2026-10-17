@@ -1,0 +1,1 @@
+{ "projects": { "default": "naseyan-pos" }, "targets": { "naseyan-pos": { "hosting": { "backoffice": ["naseyan-backoffice"], "member": ["naseyan-member"] } } } }

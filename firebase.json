@@ -1,0 +1,9 @@
+{
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json", "location": "asia-southeast2" },
+  "functions": [ { "source": "functions", "codebase": "default", "runtime": "nodejs22", "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"] } ],
+  "hosting": [
+    { "target": "backoffice", "public": "app/build/web-backoffice", "rewrites": [ { "source": "**", "destination": "/index.html" } ] },
+    { "target": "member", "public": "app/build/web-member", "rewrites": [ { "source": "**", "destination": "/index.html" } ] }
+  ],
+  "emulators": { "auth": { "port": 9099 }, "firestore": { "port": 8080 }, "functions": { "port": 5001 }, "ui": { "enabled": true } }
+}

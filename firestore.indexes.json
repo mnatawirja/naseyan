@@ -1,0 +1,10 @@
+{
+  "indexes": [
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "outletId", "order": "ASCENDING" }, { "fieldPath": "businessDate", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "outletId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "orders", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "customerId", "order": "ASCENDING" }, { "fieldPath": "paidAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "summaries", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "outletId", "order": "ASCENDING" }, { "fieldPath": "date", "order": "ASCENDING" } ] },
+    { "collectionGroup": "shifts", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "outletId", "order": "ASCENDING" }, { "fieldPath": "openedAt", "order": "DESCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

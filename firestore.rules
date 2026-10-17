@@ -1,0 +1,100 @@
+rules_version = '2';
+// Naseyan Firestore security rules.
+// Who is who:
+//  - Staff on a till sign in with a custom token from the staffSignIn function: claims role, staffId, outlets (list).
+//  - Back-office users sign in with email; claims role and outlets ('all' or a list), set by setUserRole.
+//  - Members sign in with phone OTP; their customer document id is their phone number without '+'.
+//  - Table QR guests sign in anonymously and may only create and read their own QR orders.
+// Loyalty fields (points, stamps, missions, rewards, lifetime, ledger) are written only by Cloud Functions.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function role() { return request.auth.token.get('role', ''); }
+    function rank() {
+      return role() == 'owner' ? 5 : role() == 'manager' ? 4 : role() == 'supervisor' ? 3
+           : role() == 'cashier' ? 2 : role() == 'barista' ? 1 : 0;
+    }
+    function staff() { return signedIn() && rank() >= 1; }
+    function atLeast(n) { return signedIn() && rank() >= n; }
+    function outletOk(o) {
+      let outs = request.auth.token.get('outlets', []);
+      return outs == 'all' || o in outs;
+    }
+    function memberId() {
+      return signedIn() && request.auth.token.get('phone_number', null) != null
+        ? request.auth.token.phone_number.replace('[+]', '') : '__none__';
+    }
+    function onlyChanges(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function unchanged(key) { return !request.resource.data.diff(resource.data).affectedKeys().hasAny([key]); }
+
+    // Menu, promos and loyalty rules are public: the QR menu and member app show them.
+    match /config/{id}        { allow read: if true; allow write: if atLeast(4); }
+    match /outlets/{id}       { allow read: if true; allow write: if atLeast(4); }
+    match /categories/{id}    { allow read: if true; allow write: if atLeast(4); }
+    match /modifierGroups/{id}{ allow read: if true; allow write: if atLeast(4); }
+    match /promos/{id}        { allow read: if true; allow write: if atLeast(4); }
+    match /stampCards/{id}    { allow read: if true; allow write: if atLeast(4); }
+    match /missions/{id}      { allow read: if true; allow write: if atLeast(4); }
+    match /items/{id} {
+      allow read: if true;
+      allow write: if atLeast(4);
+      allow update: if staff() && onlyChanges(['availability']); // sold-out switch on the till
+    }
+
+    // People and devices
+    match /staff/{id}          { allow read: if staff(); allow write: if atLeast(4) && unchangedPin(); }
+    function unchangedPin() { return request.resource == null || !request.resource.data.keys().hasAny(['pin', 'pinHash']); }
+    match /staffSecrets/{id}   { allow read, write: if false; }
+    match /deviceSecrets/{id}  { allow read, write: if false; }
+    match /devices/{id} {
+      allow read: if atLeast(4) || (staff() && request.auth.token.get('deviceId', '') == id);
+      allow update: if atLeast(4) && onlyChanges(['active', 'label']);
+    }
+    match /approvals/{id}      { allow read: if staff() && outletOk(resource.data.outletId); allow write: if false; }
+    match /backofficeUsers/{id}{ allow read: if atLeast(5); allow write: if false; }
+
+    // Orders
+    match /orders/{id} {
+      allow read: if (staff() && outletOk(resource.data.outletId))
+                  || resource.data.get('customerId', '') == memberId()
+                  || (signedIn() && resource.data.get('createdByUid', '') == request.auth.uid);
+      allow create: if (staff() && outletOk(request.resource.data.outletId)
+                        && !request.resource.data.keys().hasAny(['loyalty', 'priceChecked']))
+                    || (signedIn() && request.resource.data.channel == 'qr' && request.resource.data.status == 'new'
+                        && request.resource.data.createdByUid == request.auth.uid
+                        && !request.resource.data.keys().hasAny(['loyalty', 'priceChecked', 'payments']));
+      allow update: if staff() && outletOk(resource.data.outletId)
+                    && unchanged('loyalty') && unchanged('priceChecked') && unchanged('outletId')
+                    && (resource.data.channel != 'qr' || resource.data.get('priceChecked', false) == true);
+      allow delete: if false;
+    }
+
+    // Shifts, attendance, stock, reconciliation
+    match /shifts/{id} {
+      allow read: if staff() && outletOk(resource.data.outletId);
+      allow create, update: if atLeast(2) && outletOk(request.resource.data.outletId);
+    }
+    match /attendance/{id} {
+      allow read: if atLeast(4) || (staff() && resource.data.staffId == request.auth.token.get('staffId', ''));
+      allow create, update: if staff() && request.resource.data.staffId == request.auth.token.get('staffId', '');
+    }
+    match /inventory/{outletId}/counts/{itemId} { allow read: if staff() && outletOk(outletId); allow write: if atLeast(4) && outletOk(outletId); }
+    match /inventory/{outletId}/moves/{moveId}  { allow read: if staff() && outletOk(outletId); allow create: if atLeast(3) && outletOk(outletId); }
+    match /recon/{id}     { allow read, write: if atLeast(4); }
+    match /summaries/{id} { allow read: if atLeast(4); allow write: if false; }
+
+    // Members
+    match /customers/{phone} {
+      allow read: if staff() || phone == memberId();
+      // Staff register members at the till; members can join themselves after OTP.
+      allow create: if (staff() || phone == memberId())
+                    && request.resource.data.points == 0
+                    && request.resource.data.rewards.size() == 0
+                    && request.resource.data.lifetime == {'spend': 0, 'visits': 0}
+                    && !request.resource.data.keys().hasAny(['code']);
+      allow update: if (staff() || phone == memberId()) && onlyChanges(['name', 'birthday', 'optIn']);
+      allow delete: if atLeast(4);
+      match /ledger/{entry} { allow read: if staff() || phone == memberId(); allow write: if false; }
+    }
+  }
+}
